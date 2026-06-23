@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "interview-assistant": {
+      "command": "/home/landon-tuckett/Repos/mcp_servers/.venv/bin/python",
+      "args": ["/home/landon-tuckett/Repos/mcp_servers/interview-mcp/server.py"]
+    }
+  }
+}

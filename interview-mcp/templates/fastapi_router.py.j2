@@ -1,0 +1,41 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from .schemas import {{ class_name }}Create, {{ class_name }}Read, {{ class_name }}Update
+from .service import {{ class_name }}Service
+from app.db import get_db
+
+router = APIRouter(prefix="/{{ resource }}", tags=["{{ resource }}"])
+
+
+@router.get("", response_model=list[{{ class_name }}Read])
+def list_{{ resource }}(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return {{ class_name }}Service(db).list(skip=skip, limit=limit)
+
+
+@router.get("/{id}", response_model={{ class_name }}Read)
+def get_{{ singular }}(id: int, db: Session = Depends(get_db)):
+    item = {{ class_name }}Service(db).get(id)
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ class_name }} not found")
+    return item
+
+
+@router.post("", response_model={{ class_name }}Read, status_code=status.HTTP_201_CREATED)
+def create_{{ singular }}(payload: {{ class_name }}Create, db: Session = Depends(get_db)):
+    return {{ class_name }}Service(db).create(payload)
+
+
+@router.patch("/{id}", response_model={{ class_name }}Read)
+def update_{{ singular }}(id: int, payload: {{ class_name }}Update, db: Session = Depends(get_db)):
+    item = {{ class_name }}Service(db).update(id, payload)
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ class_name }} not found")
+    return item
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_{{ singular }}(id: int, db: Session = Depends(get_db)):
+    deleted = {{ class_name }}Service(db).delete(id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ class_name }} not found")

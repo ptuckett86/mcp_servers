@@ -1,0 +1,18 @@
+# Test runner for github/ and jira/ (no long-lived service).
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --upgrade pip && pip install -r requirements-dev.txt
+
+COPY github/ ./github/
+COPY jira/ ./jira/
+COPY scripts/run_tests.sh ./scripts/run_tests.sh
+RUN chmod +x ./scripts/run_tests.sh
+
+CMD ["./scripts/run_tests.sh"]

@@ -1,0 +1,53 @@
+# Global MCP stack — `docker compose up -d --build`
+# Cursor connects over SSE:
+#   github-assistant → http://127.0.0.1:8001/sse
+#   jira-assistant   → http://127.0.0.1:8002/sse
+#
+# Tests (one-shot): `docker compose --profile test run --rm tests`
+
+services:
+  github:
+    build:
+      context: .
+      dockerfile: github/Dockerfile
+    image: mcp-github:latest
+    container_name: mcp-github
+    restart: unless-stopped
+    ports:
+      - "${GITHUB_MCP_PORT:-8001}:8000"
+    env_file:
+      - .env
+    environment:
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "8000"
+      MCP_TRANSPORT: sse
+
+  jira:
+    build:
+      context: .
+      dockerfile: jira/Dockerfile
+    image: mcp-jira:latest
+    container_name: mcp-jira
+    restart: unless-stopped
+    ports:
+      - "${JIRA_MCP_PORT:-8002}:8000"
+    env_file:
+      - .env
+    environment:
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "8000"
+      MCP_TRANSPORT: sse
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    image: mcp-tests:latest
+    container_name: mcp-tests
+    environment:
+      # No real API tokens needed — suites mock clients.
+      GITHUB_TOKEN: test-token
+      JIRA_BASE_URL: https://example.atlassian.net
+      JIRA_EMAIL: test@example.com
+      JIRA_API_TOKEN: test-token

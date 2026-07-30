@@ -18,6 +18,7 @@ load_dotenv(ROOT / ".env")
 load_dotenv(ROOT.parent / ".env")
 
 from tasks.pr_comments import propose_pr_comment_solutions  # noqa: E402
+from tasks.pr_metrics import trailing_month_pr_metrics  # noqa: E402
 from tasks.pr_review import review_pull_request  # noqa: E402
 
 mcp = FastMCP(
@@ -28,6 +29,7 @@ mcp = FastMCP(
 )
 mcp.tool()(propose_pr_comment_solutions)
 mcp.tool()(review_pull_request)
+mcp.tool()(trailing_month_pr_metrics)
 
 
 if __name__ == "__main__":

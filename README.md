@@ -66,6 +66,7 @@ docker compose down
 |------|-------------|
 | `propose_pr_comment_solutions` | Read PR comments and propose solutions |
 | `review_pull_request` | Scan PR for security issues, violations, logic gaps |
+| `trailing_month_pr_metrics` | Avg commits/day, comments, and time-open over your PRs in a trailing window |
 
 ### jira-assistant (`jira`)
 

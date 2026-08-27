@@ -85,3 +85,72 @@ def test_request_maps_auth_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     client = GitHubClient(token="bad")
     with pytest.raises(ValueError, match="authentication failed"):
         client._request("GET", "/user")
+
+
+def test_get_unresolved_reviewer_comments_filters_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = GitHubClient(token="test-token")
+
+    monkeypatch.setattr(
+        client,
+        "get_authenticated_user",
+        lambda: {"login": "alice"},
+    )
+    monkeypatch.setattr(
+        client,
+        "graphql",
+        lambda query, variables=None: {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        "nodes": [
+                            {
+                                "id": "PRRT_resolved",
+                                "isResolved": True,
+                                "path": "old.py",
+                                "line": 1,
+                                "comments": {
+                                    "nodes": [
+                                        {
+                                            "body": "Fix this",
+                                            "createdAt": "2026-01-01T00:00:00Z",
+                                            "url": "https://example.com/1",
+                                            "author": {"login": "bob"},
+                                        }
+                                    ]
+                                },
+                            },
+                            {
+                                "id": "PRRT_open",
+                                "isResolved": False,
+                                "path": "auth/session.py",
+                                "line": 88,
+                                "comments": {
+                                    "nodes": [
+                                        {
+                                            "body": "Please add a test.",
+                                            "createdAt": "2026-01-01T01:00:00Z",
+                                            "url": "https://example.com/2",
+                                            "author": {"login": "carol"},
+                                        },
+                                        {
+                                            "body": "Will do.",
+                                            "createdAt": "2026-01-01T02:00:00Z",
+                                            "url": "https://example.com/3",
+                                            "author": {"login": "alice"},
+                                        },
+                                    ]
+                                },
+                            },
+                        ],
+                    }
+                }
+            }
+        },
+    )
+
+    comments = client.get_unresolved_reviewer_comments("acme", "widgets", 42)
+    assert len(comments) == 1
+    assert comments[0]["user"]["login"] == "carol"
+    assert comments[0]["path"] == "auth/session.py"
+    assert comments[0]["thread_id"] == "PRRT_open"

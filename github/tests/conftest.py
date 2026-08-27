@@ -6,6 +6,37 @@ import pytest
 
 
 @pytest.fixture
+def sample_pr_review_bundle(sample_pr_bundle) -> dict:
+    return {
+        "owner": sample_pr_bundle["owner"],
+        "repo": sample_pr_bundle["repo"],
+        "number": sample_pr_bundle["number"],
+        "viewer_login": "alice",
+        "url": sample_pr_bundle["url"],
+        "title": sample_pr_bundle["title"],
+        "body": sample_pr_bundle["body"],
+        "state": sample_pr_bundle["state"],
+        "draft": sample_pr_bundle["draft"],
+        "user": sample_pr_bundle["user"],
+        "base": sample_pr_bundle["base"],
+        "head": sample_pr_bundle["head"],
+        "files": sample_pr_bundle["files"],
+        "reviewer_comments": [
+            {
+                "body": "Please add a test for the null token case.",
+                "user": {"login": "carol"},
+                "path": "auth/session.py",
+                "line": 88,
+                "created_at": "2026-01-01T01:00:00Z",
+                "html_url": "https://github.com/acme/widgets/pull/42#discussion_r1",
+                "thread_id": "PRRT_test1",
+                "is_resolved": False,
+            }
+        ],
+    }
+
+
+@pytest.fixture
 def sample_pr_bundle() -> dict:
     return {
         "owner": "acme",

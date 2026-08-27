@@ -254,18 +254,8 @@ def _structural_findings(bundle: dict[str, Any]) -> list[Finding]:
     return findings
 
 
-def review_pull_request(pr_url: str) -> str:
-    """Review a GitHub PR for security vulnerabilities, code violations, and logic gaps.
-
-    Args:
-        pr_url: GitHub pull request URL, or owner/repo#123.
-    """
-    try:
-        client = GitHubClient()
-        bundle = client.get_pr_bundle(pr_url)
-    except Exception as exc:  # noqa: BLE001
-        return f"Error fetching PR: {exc}"
-
+def analyze_pull_request(bundle: dict[str, Any]) -> tuple[list[Finding], int]:
+    """Return deduplicated findings and count of files missing patch text."""
     findings: list[Finding] = []
     findings.extend(_structural_findings(bundle))
 
@@ -275,13 +265,11 @@ def review_pull_request(pr_url: str) -> str:
         findings.extend(_filename_findings(path))
         patch = file_info.get("patch")
         if not patch:
-            # GitHub omits patches for binary/large files
             if file_info.get("status") in ("added", "modified", "renamed"):
                 truncated_files += 1
             continue
         findings.extend(_scan_patch(path, patch))
 
-    # Deduplicate by (path, title)
     seen: set[tuple[str | None, str]] = set()
     unique: list[Finding] = []
     for finding in findings:
@@ -293,13 +281,22 @@ def review_pull_request(pr_url: str) -> str:
 
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     unique.sort(key=lambda f: (severity_order.get(f["severity"], 9), f["category"], f["title"]))
+    return unique, truncated_files
 
+
+def _format_pr_findings_report(
+    bundle: dict[str, Any],
+    findings: list[Finding],
+    *,
+    truncated_files: int = 0,
+    heading: str | None = None,
+) -> list[str]:
     counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    for f in unique:
-        counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+    for finding in findings:
+        counts[finding["severity"]] = counts.get(finding["severity"], 0) + 1
 
     lines = [
-        f"# PR review — {bundle['owner']}/{bundle['repo']}#{bundle['number']}",
+        heading or f"# PR review — {bundle['owner']}/{bundle['repo']}#{bundle['number']}",
         "",
         f"**Title:** {bundle['title']}",
         f"**URL:** {bundle['url']}",
@@ -307,9 +304,9 @@ def review_pull_request(pr_url: str) -> str:
         f"**Diff:** +{bundle.get('additions')} / -{bundle.get('deletions')} "
         f"across {bundle.get('changed_files')} files",
         "",
-        "## Summary",
+        "## Code review summary",
         (
-            f"Found **{len(unique)}** finding(s): "
+            f"Found **{len(findings)}** finding(s): "
             f"critical={counts['critical']}, high={counts['high']}, "
             f"medium={counts['medium']}, low={counts['low']}."
         ),
@@ -323,16 +320,16 @@ def review_pull_request(pr_url: str) -> str:
         )
         lines.append("")
 
-    if not unique:
+    if not findings:
         lines.append(
-            "No automated findings. Still recommend a human pass for business-logic "
-            "correctness and authorization edge cases."
+            "No automated findings from diff heuristics. Still recommend a human pass for "
+            "business-logic correctness and authorization edge cases."
         )
-        return "\n".join(lines)
+        return lines
 
-    lines.append("## Findings")
+    lines.append("## Security, quality, and logic findings")
     lines.append("")
-    for i, finding in enumerate(unique, start=1):
+    for i, finding in enumerate(findings, start=1):
         loc = f" `{finding['path']}`" if finding.get("path") else ""
         lines.append(
             f"### {i}. [{finding['severity'].upper()}] [{finding['category']}] "
@@ -341,6 +338,23 @@ def review_pull_request(pr_url: str) -> str:
         lines.append(finding["detail"])
         lines.append("")
 
+    return lines
+
+
+def review_pull_request(pr_url: str) -> str:
+    """Review a GitHub PR for security vulnerabilities, code violations, and logic gaps.
+
+    Args:
+        pr_url: GitHub pull request URL, or owner/repo#123.
+    """
+    try:
+        client = GitHubClient()
+        bundle = client.get_pr_bundle(pr_url)
+    except Exception as exc:  # noqa: BLE001
+        return f"Error fetching PR: {exc}"
+
+    findings, truncated_files = analyze_pull_request(bundle)
+    lines = _format_pr_findings_report(bundle, findings, truncated_files=truncated_files)
     lines.extend(
         [
             "## Reviewer checklist (manual)",

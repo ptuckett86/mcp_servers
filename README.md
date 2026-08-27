@@ -7,6 +7,7 @@ GitHub and Jira MCP servers, run together via Docker Compose (SSE). Cursor conne
 ```
 mcp_servers/
 ├── docker-compose.yml
+├── Dockerfile.base         # shared pip deps (rebuilds when requirements.txt changes)
 ├── Dockerfile.test         # one-shot test runner
 ├── requirements.txt
 ├── requirements-dev.txt    # + pytest
@@ -50,7 +51,28 @@ docker compose up -d --build
 | github | http://127.0.0.1:8001/sse |
 | jira | http://127.0.0.1:8002/sse |
 
-3. Cursor MCP config (global `~/.cursor/mcp.json` and [`.cursor/mcp.json`](.cursor/mcp.json)) should point at those URLs. Reload MCP after compose is up.
+3. Add the MCP servers to Cursor.
+
+   **Project-level** (recommended): this repo already includes [`.cursor/mcp.json`](.cursor/mcp.json). Open the repo in Cursor and the servers should appear after the stack is running.
+
+   **Global** (all projects): add the same config to `~/.cursor/mcp.json` (create the file if it does not exist):
+
+   ```json
+   {
+     "mcpServers": {
+       "github-assistant": {
+         "url": "http://127.0.0.1:8001/sse"
+       },
+       "jira-assistant": {
+         "url": "http://127.0.0.1:8002/sse"
+       }
+     }
+   }
+   ```
+
+   If you changed the compose ports, update the URLs to match `GITHUB_MCP_PORT` / `JIRA_MCP_PORT` in `.env`.
+
+   Reload MCP in Cursor after `docker compose up` (Command Palette → **MCP: List Servers** → refresh/reconnect).
 
 ```bash
 docker compose ps
@@ -64,9 +86,23 @@ docker compose down
 
 | Tool | Description |
 |------|-------------|
-| `propose_pr_comment_solutions` | Read PR comments and propose solutions |
+| `propose_pr_comment_solutions` | Implement unresolved reviewer comments (not yours) in the local repo and stage changes for commit. Pass `dry_run=true` to preview only. |
 | `review_pull_request` | Scan PR for security issues, violations, logic gaps |
+| `review_pull_request_against_ticket` | Review PR risks and compare implementation against a Jira ticket |
 | `trailing_month_pr_metrics` | Avg commits/day, comments, and time-open over your PRs in a trailing window |
+
+Example prompts:
+
+```text
+Please review PR https://github.com/7pace/7pace.Timetracker/pull/4873 against ticket https://appfire.atlassian.net/browse/TT-8500
+
+Dry run: use propose_pr_comment_solutions on https://github.com/org/repo/pull/123
+use propose_pr_comment_solutions on https://github.com/org/repo/pull/123
+```
+
+`review_pull_request_against_ticket` needs `GITHUB_TOKEN` plus `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN` in `.env`.
+
+Say **Dry run** (or pass `dry_run=true`) to preview the plan without editing or staging files.
 
 ### jira-assistant (`jira`)
 
@@ -91,4 +127,5 @@ docker compose --profile test run --rm tests
 
 - New GitHub tools → `github/tasks/` + register in `github/server.py`
 - New Jira tools → `jira/tasks/` + register in `jira/server.py`
-- Rebuild after code changes: `docker compose up -d --build`
+- Rebuild after code changes: `docker compose up -d --build github jira` (fast — only app layers rebuild unless `requirements.txt` changed)
+- Rebuild Python deps: change `requirements.txt`, then `docker compose build base`

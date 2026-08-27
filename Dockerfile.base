@@ -1,0 +1,16 @@
+# Shared Python deps for github, jira, and test images.
+# Rebuilds only when requirements.txt or certs/netskope-ca.crt change.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Trust Netskope TLS inspection CA (required behind Appfire VPN).
+COPY certs/netskope-ca.crt /usr/local/share/ca-certificates/netskope-ca.crt
+RUN update-ca-certificates
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt

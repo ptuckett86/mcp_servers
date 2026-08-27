@@ -1,20 +1,13 @@
-FROM python:3.12-slim
+# syntax=docker/dockerfile:1
+FROM base_image
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    FASTMCP_HOST=0.0.0.0 \
+ENV FASTMCP_HOST=0.0.0.0 \
     FASTMCP_PORT=8000 \
     MCP_TRANSPORT=sse
 
-WORKDIR /app
-
-# Build context is the mcp_servers root (shared requirements.txt).
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
 COPY github/client/ ./client/
 COPY github/tasks/ ./tasks/
+COPY jira/client/jira.py ./jira_client.py
 COPY github/server.py .
 
 EXPOSE 8000

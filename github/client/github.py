@@ -18,7 +18,7 @@ PR_SHORT_RE = re.compile(
 
 
 class GitHubClient:
-    """Thin GitHub REST client scoped to the authenticated user's token."""
+    """Thin GitHub REST/GraphQL client scoped to the authenticated user's token."""
 
     def __init__(self, token: str | None = None, base_url: str | None = None) -> None:
         self.token = token or os.environ.get("GITHUB_TOKEN", "")
@@ -53,6 +53,153 @@ class GitHubClient:
             if response.status_code == 204 or not response.content:
                 return None
             return response.json()
+
+    def graphql(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run a GitHub GraphQL query or mutation."""
+        payload: dict[str, Any] = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        with httpx.Client(timeout=60.0, headers=self._headers) as client:
+            response = client.post(f"{self.base_url}/graphql", json=payload)
+            if response.status_code == 401:
+                raise ValueError("GitHub authentication failed. Check GITHUB_TOKEN.")
+            if response.status_code == 403:
+                raise ValueError(
+                    f"GitHub access denied (403): {response.text[:300]}. "
+                    "Token may lack required scopes (repo, pull_requests)."
+                )
+            response.raise_for_status()
+            body = response.json()
+            if body.get("errors"):
+                messages = "; ".join(
+                    err.get("message", str(err)) for err in body["errors"][:3]
+                )
+                raise ValueError(f"GitHub GraphQL error: {messages}")
+            return body.get("data") or {}
+
+    @staticmethod
+    def _same_login(left: str | None, right: str | None) -> bool:
+        return (left or "").lower() == (right or "").lower()
+
+    def get_unresolved_reviewer_comments(
+        self,
+        owner: str,
+        repo: str,
+        number: int,
+        viewer_login: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return inline review comments from unresolved threads, excluding the viewer's."""
+        viewer = viewer_login or (self.get_authenticated_user() or {}).get("login")
+        if not viewer:
+            raise ValueError("Could not resolve authenticated GitHub username.")
+
+        query = """
+        query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  id
+                  isResolved
+                  path
+                  line
+                  startLine
+                  comments(first: 100) {
+                    nodes {
+                      body
+                      createdAt
+                      url
+                      author { login }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        comments: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            data = self.graphql(
+                query,
+                {
+                    "owner": owner,
+                    "repo": repo,
+                    "number": number,
+                    "cursor": cursor,
+                },
+            )
+            pull_request = ((data.get("repository") or {}).get("pullRequest")) or {}
+            threads = ((pull_request.get("reviewThreads") or {}).get("nodes")) or []
+            page_info = (pull_request.get("reviewThreads") or {}).get("pageInfo") or {}
+
+            for thread in threads:
+                if thread.get("isResolved"):
+                    continue
+                path = thread.get("path")
+                line = thread.get("line") or thread.get("startLine")
+                for node in ((thread.get("comments") or {}).get("nodes")) or []:
+                    author = ((node.get("author") or {}).get("login")) or "unknown"
+                    if self._same_login(author, viewer):
+                        continue
+                    body = (node.get("body") or "").strip()
+                    if not body:
+                        continue
+                    comments.append(
+                        {
+                            "body": body,
+                            "user": {"login": author},
+                            "path": path,
+                            "line": line,
+                            "created_at": node.get("createdAt"),
+                            "html_url": node.get("url"),
+                            "thread_id": thread.get("id"),
+                            "is_resolved": False,
+                        }
+                    )
+
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                break
+
+        return comments
+
+    def get_pr_review_work_bundle(self, pr_ref: str) -> dict[str, Any]:
+        """Fetch PR metadata, files, and unresolved reviewer comments for the viewer."""
+        owner, repo, number = self.parse_pr_ref(pr_ref)
+        viewer = (self.get_authenticated_user() or {}).get("login")
+        if not viewer:
+            raise ValueError("Could not resolve authenticated GitHub username.")
+        pr = self.get_pull_request(owner, repo, number)
+        return {
+            "owner": owner,
+            "repo": repo,
+            "number": number,
+            "viewer_login": viewer,
+            "url": pr.get("html_url") or f"https://github.com/{owner}/{repo}/pull/{number}",
+            "title": pr.get("title", ""),
+            "body": pr.get("body") or "",
+            "state": pr.get("state"),
+            "draft": pr.get("draft", False),
+            "user": (pr.get("user") or {}).get("login"),
+            "base": (pr.get("base") or {}).get("ref"),
+            "head": (pr.get("head") or {}).get("ref"),
+            "files": self.get_files(owner, repo, number),
+            "reviewer_comments": self.get_unresolved_reviewer_comments(
+                owner,
+                repo,
+                number,
+                viewer_login=viewer,
+            ),
+        }
 
     @staticmethod
     def parse_pr_ref(pr_ref: str) -> tuple[str, str, int]:

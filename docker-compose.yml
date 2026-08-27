@@ -6,11 +6,22 @@
 # Tests (one-shot): `docker compose --profile test run --rm tests`
 
 services:
+  base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    image: mcp-python-base:latest
+    entrypoint: ["true"]
+
   github:
     build:
       context: .
       dockerfile: github/Dockerfile
+      additional_contexts:
+        base_image: service:base
     image: mcp-github:latest
+    depends_on:
+      - base
     container_name: mcp-github
     restart: unless-stopped
     ports:
@@ -26,7 +37,11 @@ services:
     build:
       context: .
       dockerfile: jira/Dockerfile
+      additional_contexts:
+        base_image: service:base
     image: mcp-jira:latest
+    depends_on:
+      - base
     container_name: mcp-jira
     restart: unless-stopped
     ports:
@@ -43,7 +58,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
+      additional_contexts:
+        base_image: service:base
     image: mcp-tests:latest
+    depends_on:
+      - base
     container_name: mcp-tests
     environment:
       # No real API tokens needed — suites mock clients.

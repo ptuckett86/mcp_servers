@@ -1,4 +1,4 @@
-"""GitHub MCP server — PR comment solutions and security/code review (SSE)."""
+"""GitHub MCP server — PR review changes, security/code review, and metrics (SSE)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ load_dotenv(ROOT.parent / ".env")
 from tasks.pr_comments import propose_pr_comment_solutions  # noqa: E402
 from tasks.pr_metrics import trailing_month_pr_metrics  # noqa: E402
 from tasks.pr_review import review_pull_request  # noqa: E402
+from tasks.pr_ticket_review import review_pull_request_against_ticket  # noqa: E402
 
 mcp = FastMCP(
     "github-assistant",
@@ -29,6 +30,7 @@ mcp = FastMCP(
 )
 mcp.tool()(propose_pr_comment_solutions)
 mcp.tool()(review_pull_request)
+mcp.tool()(review_pull_request_against_ticket)
 mcp.tool()(trailing_month_pr_metrics)
 
 
